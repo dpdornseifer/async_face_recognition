@@ -1,0 +1,2 @@
+aiohttp>=0.21.5
+cchardet>=1.0.0
