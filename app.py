@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import asyncio
 import json
+import logging
 from asyncio import queues, as_completed
 from aiohttp import web
 from aiohttp.web import Application, Response
@@ -10,22 +11,38 @@ from aiohttp.web import Application, Response
 class FaceRecognizer:
 
     def __init__(self, port, address, cascade):
+        self._logger = logging.getLogger(__name__)
+        self._logger.setLevel(logging.INFO)
+
         self._port = port
         self._address = address
         self._cascade = cascade
-        self._images = queues.Queue()
+        self._images = queues.Queue(maxsize=3)
+
 
     @asyncio.coroutine
-    def getlastimage(self):
+    def _getlastimage(self):
         ''' returns element from the image queue '''
-        image = yield from self._images.get()
+
+        if not self._images.empty():
+            image = yield from self._images.get()
+            self._logger.info("getlastimage: Number of items still in the queue: {}".format(self._images.qsize()))
+        else:
+            # if empty raise QueueEmpty exception
+            raise asyncio.QueueEmpty
+
         return image
 
     @asyncio.coroutine
     def _addimage(self, image):
-        ''' keeps track of the last three images with recognitzed objects '''
-        print("Number of items in the queue: {}".format(self._images.qsize()))
-        yield from self._images.put(image)
+        ''' keeps track of the last three images with recognized objects '''
+
+        if not self._images.full():
+            self._logger.info("addimage: new image added to the queue")
+            yield from self._images.put(image)
+
+        else:
+            self._logger.info("addimage: queue is full right now")
 
     def _cascade_detect(self, raw_image):
         ''' use opencv cascades to recognize objects on the incomming images '''
@@ -44,7 +61,7 @@ class FaceRecognizer:
 
         for (x, y, w, h) in coordinates:
             cv2.rectangle(color_image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            print("({}, {}, {}, {})".format(x, y, w, h))
+            self._logger.debug("face recognized at: x: {}, y: {}, w: {}, h: {}".format(x, y, w, h))
 
         return color_image, self._tojson(coordinates)
 
@@ -61,15 +78,17 @@ class FaceRecognizer:
         ''' returnes the processed images with the detected artifacts highlighted '''
         try:
 
-            for f in as_completed([self.getlastimage()], timeout=1):
-                image = yield from f
+            image = yield from self._getlastimage()
 
             image_buf = cv2.imencode('.jpg', image)[1]
             image_str = np.array(image_buf).tostring()
 
-        except asyncio.TimeoutError as te:
+        except asyncio.QueueEmpty as qe:
+            msg = 'QueueEmpty exception has been thrown. There is no image ' \
+                  'with some recognized artifacts in the queue right now.'
+            self._logger.warning(msg)
             return Response(
-                text='Timeout error occurred - there is probably no image in the buffer right now',
+                text=msg,
                 status=500,
                 content_type='application/json'
             )
@@ -97,7 +116,9 @@ class FaceRecognizer:
 
         image, coordinates = yield from future
 
-        yield from self._addimage(image)
+        # just add a picture to the queue if faces have been recognized, filter for non empty json arrays
+        if coordinates != '[]':
+            yield from self._addimage(image)
 
         return web.Response(text=coordinates,
                             status=200,
@@ -107,13 +128,18 @@ class FaceRecognizer:
     @asyncio.coroutine
     def init(self, loop):
         app = Application(loop=loop)
+
+        # configure stream handler for console
+        ch = logging.StreamHandler()
+        self._logger.addHandler(ch)
+
         app.router.add_route('GET', '/', self._returnfaces)
         app.router.add_route('POST', '/detectface', self._detectface)
 
 
         handler = app.make_handler()
         srv = yield from loop.create_server(handler, self._address, self._port)
-        print("Server started on host {} / port {}".format(self._address, self._port))
+        self._logger.info("Server started on host {} / port {}".format(self._address, self._port))
         return srv, handler
 
 
