@@ -119,7 +119,7 @@ class FaceRecognizer:
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    detectface = FaceRecognizer(8080, '0.0.0.0', 'haarcascade_frontalface_default.xml')
+    detectface = FaceRecognizer(8080, '0.0.0.0', 'frontalface.xml')
     srv, handler = loop.run_until_complete(detectface.init(loop))
 
     try:
