@@ -1,8 +1,8 @@
 FROM harshjv/opencv3
 
 # set proxy for docker environment
-ENV http_proxy http://proxy.wdf.sap.corp:8080
-ENV https_proxy https://proxy.wdf.sap.corp:8080
+#ENV http_proxy http://proxy:8080
+#ENV https_proxy https://:8080
 
 # install pip3
 RUN apt-get update \
