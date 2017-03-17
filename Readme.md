@@ -36,9 +36,9 @@ e.g. `curl -O https://github.com/Itseez/opencv/blob/master/data/haarcascades/haa
 ## Run it on Docker
 The base image used in the docker file has the OpenCV3 library already installed.
  
-1. Clone the Repo.
+1. Clone the Repo and `cd async_race_recognition_service`
 2. Set the specific OpenCV cascade file in the docker config (download it from remote or copy it from the local workdir).
-3. Build the image: `docker build -t async_race_recognition_service`. 
+3. Build the image: `docker build -t async_race_recognition_service .` 
 4. Run the container and attach it to port 8080 of the docker host: `docker run -p 8080:8080 -name async_face -it async_race_recognition_service` 
 5. Check the log output: `docker logs -f async_face`
 
